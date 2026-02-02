@@ -144,88 +144,94 @@ Aggregate Root: Her aggregate'in bir kök entity'i vardır. Diğer aggregate'ler
 Örnek aggregate root tasarımı:
 
 #### Value Object ve Entity:
-    
-    // Value Object: Değişmez (Immutable)
-    public record Premium(BigDecimal amount, String currency) {
-      public Premium {
-        if (amount.compareTo(BigDecimal.ZERO) < 0)
-        throw new IllegalArgumentException("Prim tutarı negatif olamaz.");
-      }
-    }
 
-    // Entity: Poliçe içindeki araç. Ayrı bir aggregate olması gereken durumu aşağıda bahsettim
-    @Entity
-    public class InsuredVehicle {
-      @Id @GeneratedValue
-      private Long id;
-      private String vin; // Araç Şasi No
-      // ...
-    }
+```java
+// Value Object: Değişmez (Immutable)
+public record Premium(BigDecimal amount, String currency) {
+  public Premium {
+    if (amount.compareTo(BigDecimal.ZERO) < 0)
+      throw new IllegalArgumentException("Prim tutarı negatif olamaz.");
+  }
+}
+
+// Entity: Poliçe içindeki araç. Ayrı bir aggregate olması gereken durumu aşağıda bahsettim
+@Entity
+public class InsuredVehicle {
+  @Id @GeneratedValue
+  private Long id;
+  private String vin; // Araç Şasi No
+  // ...
+}
+```
 
 #### Aggregate Root:
 Burada en önemli nokta, dışarıdan class fieldlarına doğrudan erişimi kapatmak yani setter kullanmaktan yapmaktır. Tüm değişikler metot üzerinden ilerlemelidir ki aggregate invariantları dışarıya sızmasın.
-      
-      @Entity
-      @Table(name = "policies")
-      public class Policy {
-      
-          @Id
-          @GeneratedValue(strategy = GenerationType.IDENTITY)
-          private Long id;
-      
-          @Column(unique = true, nullable = false)
-          private String policyNumber;
-      
-          private LocalDate expiryDate;
-      
-          // Aggregate içindeki Entity
-          @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
-          private InsuredVehicle vehicle;
-      
-          // Aggregate içindeki Value Object listesi
-          @ElementCollection
-          @CollectionTable(name = "policy_coverages", joinColumns = @JoinColumn(name = "policy_id"))
-          private List<Coverage> coverages = new ArrayList<>();
-      
-          // JPA için gerekli default constructor
-          protected Policy() {}
-      
-          // Aggregate Root üzerinden oluşturma (Constructor)
-          public Policy(String policyNumber, String vin, List<Coverage> initialCoverages) {
-              if (initialCoverages == null || initialCoverages.isEmpty()) {
-                  throw new DomainException("Poliçe en az bir teminat ile başlatılmalıdır.");
-              }
-              this.policyNumber = policyNumber;
-              this.vehicle = new InsuredVehicle(vin);
-              this.coverages.addAll(initialCoverages);
-              this.expiryDate = LocalDate.now().plusYears(1);
-          }
-      
-          // İş Mantığı (Invariants): Teminat ekleme kuralı
-          public void addCoverage(Coverage coverage) {
-              if (isExpired()) {
-                  throw new DomainException("Süresi dolmuş poliçeye yeni teminat eklenemez.");
-              }
-              this.coverages.add(coverage);
-          }
-      
-          public boolean isExpired() {
-              return LocalDate.now().isAfter(expiryDate);
-          }
-      
-          // Getter'lar (Sadece okunabilir erişim sağlamak için listeyi sarmalıyoruz)
-          public List<Coverage> getCoverages() {
-              return Collections.unmodifiableList(coverages);
-          }
-      }
+
+```java
+@Entity
+@Table(name = "policies")
+public class Policy {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true, nullable = false)
+    private String policyNumber;
+
+    private LocalDate expiryDate;
+
+    // Aggregate içindeki Entity
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
+    private InsuredVehicle vehicle;
+
+    // Aggregate içindeki Value Object listesi
+    @ElementCollection
+    @CollectionTable(name = "policy_coverages", joinColumns = @JoinColumn(name = "policy_id"))
+    private List<Coverage> coverages = new ArrayList<>();
+
+    // JPA için gerekli default constructor
+    protected Policy() {}
+
+    // Aggregate Root üzerinden oluşturma (Constructor)
+    public Policy(String policyNumber, String vin, List<Coverage> initialCoverages) {
+        if (initialCoverages == null || initialCoverages.isEmpty()) {
+            throw new DomainException("Poliçe en az bir teminat ile başlatılmalıdır.");
+        }
+        this.policyNumber = policyNumber;
+        this.vehicle = new InsuredVehicle(vin);
+        this.coverages.addAll(initialCoverages);
+        this.expiryDate = LocalDate.now().plusYears(1);
+    }
+
+    // İş Mantığı (Invariants): Teminat ekleme kuralı
+    public void addCoverage(Coverage coverage) {
+        if (isExpired()) {
+            throw new DomainException("Süresi dolmuş poliçeye yeni teminat eklenemez.");
+        }
+        this.coverages.add(coverage);
+    }
+
+    public boolean isExpired() {
+        return LocalDate.now().isAfter(expiryDate);
+    }
+
+    // Getter'lar (Sadece okunabilir erişim sağlamak için listeyi sarmalıyoruz)
+    public List<Coverage> getCoverages() {
+        return Collections.unmodifiableList(coverages);
+    }
+}
+```
 
 #### Repository
 Repository'i sadece Aggregate Root için oluşturmalıyız. InsuredVehicle veya Coverage için ayrı bir repository açılmamalıdır.
 
-    @Repository
-      public interface PolicyRepository extends JpaRepository<Policy, Long> {
-      Optional<Policy> findByPolicyNumber(String policyNumber);
-    }
+```java
+@Repository
+public interface PolicyRepository extends JpaRepository<Policy, Long> {
+  Optional<Policy> findByPolicyNumber(String policyNumber);
+}
+```
 
 Bu şekilde tanımlamalar yapıldığında aşağıdaki avantajlar elde edilir:
 
@@ -240,17 +246,19 @@ Eğer sisteminiz sadece sigorta satışı değil, aynı zamanda bir Filo Yöneti
 Bağımsız Yaşam Döngüsü: Araç, poliçeden bağımsız olarak kaydedilecek, servis bakımları takip ediliyor ve üzerinde poliçeden bağımsız işler yapılabilecek.
 
 Referansla Bağlantı: Bu durumda Policy içinde InsuredVehicle nesnesini direkt tutmak yerine sadece o aracın ID değerini tutmalıyız.
-    
-    public class Policy {
-      private Long vehicleId; // Başka bir Aggregate'e ID ile referans
-      // ...
-    }
 
-Durum | Entity (Poliçe İçinde) | Aggregate Root (Ayrı)
---- | --- | ---
-Bağımsız Erişim | Hayır, sadece Poliçe üzerinden erişilir. | Evet, vehicleRepository.find() ile çağrılır.
-Silinme Senaryosu | Poliçe silinince araç bilgisi de gider. | Poliçe silinse de araç sistemde kalır.
-Eşzamanlılık | Poliçeyi güncelleyen aracı da günceller. | Araç ve Poliçe aynı anda farklı kişilerce güncellenebilir.
+```java
+public class Policy {
+  private Long vehicleId; // Başka bir Aggregate'e ID ile referans
+  // ...
+}
+```
+
+| Durum | Entity (Poliçe İçinde) | Aggregate Root (Ayrı) |
+| --- | --- | --- |
+| Bağımsız Erişim | Hayır, sadece Poliçe üzerinden erişilir. | Evet, vehicleRepository.find() ile çağrılır. |
+| Silinme Senaryosu | Poliçe silinince araç bilgisi de gider. | Poliçe silinse de araç sistemde kalır. |
+| Eşzamanlılık | Poliçeyi güncelleyen aracı da günceller. | Araç ve Poliçe aynı anda farklı kişilerce güncellenebilir. |
 
 
 ### Anemic Domain Modeller'den Rich Domain Modellere Geçiş
@@ -264,22 +272,24 @@ Business logic nerededir? Genellikle Service katmanındaki devasa metodların i�
 Yapısı: Genelde sadece private alanlar ve onlara erişen metodlardan ibarettir.
 
 Sorun Nedir? Nesne, iş kurallarını koruyamaz. Herhangi bir servis, bir poliçenin bitiş tarihini rastgele bir geçmiş tarihe setleyebilir ve nesne buna "dur" diyemez.
-    
-    // Nesne sadece veri taşır
-    public class Policy {
-      private BigDecimal price;
-      public void setPrice(BigDecimal price) { this.price = price; }
-      public BigDecimal getPrice() { return price; }
-    }
-    
-    // Mantık servisin içinde boğulur
-    public class PolicyService {
-      public void applyDiscount(Policy policy, BigDecimal discount) {
-        BigDecimal newPrice = policy.getPrice().subtract(discount);
-        if (newPrice.compareTo(BigDecimal.ZERO) < 0) throw new Exception(); // Kural burada
-        policy.setPrice(newPrice);
-      }
-    }
+
+```java
+// Nesne sadece veri taşır
+public class Policy {
+  private BigDecimal price;
+  public void setPrice(BigDecimal price) { this.price = price; }
+  public BigDecimal getPrice() { return price; }
+}
+
+// Mantık servisin içinde boğulur
+public class PolicyService {
+  public void applyDiscount(Policy policy, BigDecimal discount) {
+    BigDecimal newPrice = policy.getPrice().subtract(discount);
+    if (newPrice.compareTo(BigDecimal.ZERO) < 0) throw new Exception(); // Kural burada
+    policy.setPrice(newPrice);
+  }
+}
+```
 
 ### Rich Domain Model (DDD'nin Tercihi)
 DDD'nin savunduğu model budur. Burada nesle, hem veriye hem de o veri üzerinde işlem yapan business logic'lere sahiptir.
@@ -289,19 +299,21 @@ Business logic nerededir? Bizzat nesnenin (Entity veya Value Object) içindedir.
 Yapısı: setter metotları ya hiç yoktur ya da private'dır. Veri değişiklleri sadece metodlar (örn: cancelPolicy(), applyDiscount()) aracılığıyla yapılır.
 
 Avantajı: Nesne invariantları kendisi sağlar. Kod, iş birimlerinin (product-developer-tester ve diğerleri) konuştuğu dile (Ubiquitous Language) çok daha yakındır.
-   
-    public class Policy {
-      
-      private BigDecimal price;
 
-      // Kural nesnenin içinde, kapsüllenmiş durumda
-      public void applyDiscount(BigDecimal discountAmount) {
-          if (discountAmount.compareTo(this.price) > 0) {
-              throw new DomainException("İndirim tutarı fiyattan büyük olamaz.");
-          }
-          this.price = this.price.subtract(discountAmount);
+```java
+public class Policy {
+
+  private BigDecimal price;
+
+  // Kural nesnenin içinde, kapsüllenmiş durumda
+  public void applyDiscount(BigDecimal discountAmount) {
+      if (discountAmount.compareTo(this.price) > 0) {
+          throw new DomainException("İndirim tutarı fiyattan büyük olamaz.");
       }
-    }
+      this.price = this.price.subtract(discountAmount);
+  }
+}
+```
 
 Özellik | Anemic Model | Rich Domain Model
 --- | --- | ---
@@ -322,34 +334,40 @@ Bir örnekle bu konuya biraz daha detaylı bakalım:
 
 Bu katmanda herhangi bir framework (JPA vb.) bağımlılık bulunmaz. Projenin geliştirildiği saf dil ve iş kuralları interfaceleri vardır.
 
-      // domain/repository/PolicyRepository.java
-      public interface PolicyRepository {
-      Optional<Policy> findById(Long id);
-      void save(Policy customer);
-      void delete(Long id);
-      }
+```java
+// domain/repository/PolicyRepository.java
+public interface PolicyRepository {
+  Optional<Policy> findById(Long id);
+  void save(Policy customer);
+  void delete(Long id);
+}
+```
 
 ##### 2. Infrastructure Katmanı (Implementation)
 
 Bu katmanda framework (JPA vb.) bağımlıkları kullanılabilir. İş kuralları için daha önceden tanımlanan interface burada başka bir interface'e extend edilir ve veritabanı ile konuşacak alt yapı bu katmanda kurulur.
 
+```java
 // infrastructure/persistence/JpaPolicyRepository.java
 @Repository
 public interface JpaPolicyRepository extends JpaRepository<Policy, Long> {
-// Spring Data JPA'nın gücünü burada kullanıyoruz
+   // Spring Data JPA'nın gücünü burada kullanıyoruz
 }
+```
 
 ##### Adapter
 
-      // infrastructure/persistence/PolicyRepositoryImpl.java
-      @Component
-      @RequiredArgsConstructor
-      public class PolicyRepositoryImpl implements PolicyRepository {
+```java
+// infrastructure/persistence/PolicyRepositoryImpl.java
+@Component
+@RequiredArgsConstructor
+public class PolicyRepositoryImpl implements PolicyRepository {
 
-          private final JpaPolicyRepository jpaRepository;
-      
-          // Override methods, persistence business.
-      }
+    private final JpaPolicyRepository jpaRepository;
+
+    // Override methods, persistence business.
+}
+```
 
 ##### Neden Bu Kadar Zahmete Girdik?
 
@@ -402,58 +420,58 @@ Ayrıca eventler işlenirken exception meydana gelmesi durumlarında retry mekan
 
 1. Domain Event: Poliçenin kesildiğini temsil eden event.
 
-
-      // domain/event/PolicyIssuedEvent.java
-      public record PolicyIssuedEvent(
-         Long policyId,
-         Long customerId,
-         BigDecimal premiumAmount,
-         LocalDateTime issuedAt
-      ) {}
+```java
+// domain/event/PolicyIssuedEvent.java
+public record PolicyIssuedEvent(
+   Long policyId,
+   Long customerId,
+   BigDecimal premiumAmount,
+   LocalDateTime issuedAt
+) {}
+```
 
 
 2. Publisher:
 
-   
-   
-       // domain/service/PolicyService.java
-       @Service
-       @RequiredArgsConstructor
-       public class PolicyService {
-        
-          private final PolicyRepository policyRepository;
-          private final ApplicationEventPublisher eventPublisher;
-   
-   
-          @Transactional
-          public void issuePolicy(PolicyRequest request) {
-              Policy policy = new Policy(request.customerId(), request.amount());
-              policyRepository.save(policy);
-      
-              eventPublisher.publishEvent(new PolicyIssuedEvent(
-                  policy.getId(),
-                  policy.getCustomerId(),
-                  policy.getPremiumAmount(),
-                  LocalDateTime.now()
-              ));
-      
-              System.out.println("Poliçe başarıyla oluşturuldu: " + policy.getId());
-          }
+```java
+// domain/service/PolicyService.java
+@Service
+@RequiredArgsConstructor
+public class PolicyService {
+
+   private final PolicyRepository policyRepository;
+   private final ApplicationEventPublisher eventPublisher;
+
+   @Transactional
+   public void issuePolicy(PolicyRequest request) {
+       Policy policy = new Policy(request.customerId(), request.amount());
+       policyRepository.save(policy);
+
+       eventPublisher.publishEvent(new PolicyIssuedEvent(
+           policy.getId(),
+           policy.getCustomerId(),
+           policy.getPremiumAmount(),
+           LocalDateTime.now()
+       ));
+
+       System.out.println("Poliçe başarıyla oluşturuldu: " + policy.getId());
    }
+}
+```
 
 3. Billing Modülü (Subscriber / Listener)
 
+```java
+// infrastructure/listener/BillingEventListener.java
+@Component
+public class BillingEventListener {
 
-    
-      // infrastructure/listener/BillingEventListener.java
-       @Component
-       public class BillingEventListener {
-
-          @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-          public void handlePolicyIssued(PolicyIssuedEvent event) {
-              System.out.println("Poliçe yayını yakalandı. Fatura oluşturuluyor...");
-          }
-    }
+   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+   public void handlePolicyIssued(PolicyIssuedEvent event) {
+       System.out.println("Poliçe yayını yakalandı. Fatura oluşturuluyor...");
+   }
+}
+```
 
 
 Kaynaklar:
