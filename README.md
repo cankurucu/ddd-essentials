@@ -405,51 +405,54 @@ Ayrıca eventler işlenirken exception meydana gelmesi durumlarında retry mekan
 
       // domain/event/PolicyIssuedEvent.java
       public record PolicyIssuedEvent(
-      Long policyId,
-      Long customerId,
-      BigDecimal premiumAmount,
-      LocalDateTime issuedAt
+         Long policyId,
+         Long customerId,
+         BigDecimal premiumAmount,
+         LocalDateTime issuedAt
       ) {}
+
 
 2. Publisher:
 
    
-    // domain/service/PolicyService.java
-    @Service
-    @RequiredArgsConstructor
-    public class PolicyService {
-     
-       private final PolicyRepository policyRepository;
-       private final ApplicationEventPublisher eventPublisher;
-
-
-       @Transactional
-       public void issuePolicy(PolicyRequest request) {
-           Policy policy = new Policy(request.customerId(), request.amount());
-           policyRepository.save(policy);
    
-           eventPublisher.publishEvent(new PolicyIssuedEvent(
-               policy.getId(),
-               policy.getCustomerId(),
-               policy.getPremiumAmount(),
-               LocalDateTime.now()
-           ));
+       // domain/service/PolicyService.java
+       @Service
+       @RequiredArgsConstructor
+       public class PolicyService {
+        
+          private final PolicyRepository policyRepository;
+          private final ApplicationEventPublisher eventPublisher;
    
-           System.out.println("Poliçe başarıyla oluşturuldu: " + policy.getId());
-       }
-}
+   
+          @Transactional
+          public void issuePolicy(PolicyRequest request) {
+              Policy policy = new Policy(request.customerId(), request.amount());
+              policyRepository.save(policy);
+      
+              eventPublisher.publishEvent(new PolicyIssuedEvent(
+                  policy.getId(),
+                  policy.getCustomerId(),
+                  policy.getPremiumAmount(),
+                  LocalDateTime.now()
+              ));
+      
+              System.out.println("Poliçe başarıyla oluşturuldu: " + policy.getId());
+          }
+   }
 
 3. Billing Modülü (Subscriber / Listener)
 
 
-    // infrastructure/listener/BillingEventListener.java
-    @Component
-    public class BillingEventListener {
+    
+      // infrastructure/listener/BillingEventListener.java
+       @Component
+       public class BillingEventListener {
 
-       @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-       public void handlePolicyIssued(PolicyIssuedEvent event) {
-           System.out.println("Poliçe yayını yakalandı. Fatura oluşturuluyor...");
-       }
+          @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+          public void handlePolicyIssued(PolicyIssuedEvent event) {
+              System.out.println("Poliçe yayını yakalandı. Fatura oluşturuluyor...");
+          }
     }
 
 
